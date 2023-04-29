@@ -4,18 +4,24 @@ use std::cmp::Eq;
 use std::cmp::Ord;
 use std::cmp::PartialEq;
 use std::cmp::PartialOrd;
-use std::fs::{remove_file, File, OpenOptions};
+use std::fs::read;
+use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::prelude::*;
 use std::io::BufReader;
+use std::ops::DerefMut;
 use std::path::Path;
 use std::thread;
 use std::time::SystemTime;
+use json::JsonValue;
 use textplots::{Chart, Plot, Shape};
+use json::object;
 
 pub static mut MONITOR: bool = false;
 pub static mut BEFORE_EACH: fn() = || {};
 pub static mut AFTER_EACH: fn() = || {};
 pub static mut TEST_COUNTER: u16 = 0;
+pub static mut TIME_STAMP: u128 = 0;
+
 
 pub fn describe(msg: &str, func: fn()) -> () {
     let start_duration: SystemTime = SystemTime::now();
@@ -33,30 +39,50 @@ pub fn describe(msg: &str, func: fn()) -> () {
 
             let file: File = OpenOptions::new()
                 .read(true)
-                .open(".budgie_performance.log")
+                .open(format!(".budgie/{}.log", TIME_STAMP))
                 .unwrap();
 
             let reader: BufReader<File> = BufReader::new(file);
             let mut performance_chart: Chart = Chart::new(200, 100, 0., f32::from(TEST_COUNTER));
             let mut vec_points: Vec<(f32, f32)> = Vec::new();
-            let mut line_counter: f32 = 0.;
+            let mut vec_tests: Vec<(String, f32)> = Vec::new();
+            let mut counter: f32 = 0.;
 
             for line in reader.lines() {
                 let str_line: String = line.unwrap();
-                let parsed_runtime: f32 = str_line.parse().unwrap();
-                vec_points.push((line_counter, parsed_runtime));
-                line_counter += 1.;
+                let parsed_json: JsonValue = json::parse(&str_line).unwrap();
+                let thread_end_time = parsed_json["thread_end_time"].as_f32().unwrap();
+                vec_points.push((counter, thread_end_time));
+                vec_tests.push((parsed_json["test_name"].as_str().unwrap().to_string(), thread_end_time));
+                counter += 1.;
             }
 
+            vec_tests.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            vec_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            vec_tests.reverse();
+            vec_points.reverse();
+
+            let mut i: usize = 0;
+            counter = 0.;
+            while i < vec_points.len() {  // Re-number tests from 0 -> vec_points.len()
+                vec_points[i] = (f32::from(counter), vec_points[i].1);
+                counter += 1.;
+                i += 1;
+            }
+            
+            println!("{} Performance Chart {}", "=".repeat(10), "=".repeat(10));
             performance_chart
                 .lineplot(&Shape::Bars(vec_points.as_slice()))
                 .display();
-
-            match remove_file(Path::new(".budgie_performance.log")) {
-                Err(why) => panic!("Failed to delete performance log: {}", why),
-                Ok(_) => {}
+            
+            println!("{} Tests Ran {}", "=".repeat(10), "=".repeat(10));
+            i = 0;
+            while (i < vec_tests.len()) {
+                println!("{}: {}s", vec_tests[i].0, vec_tests[i].1);
+                i += 1;
             }
 
+            println!("{}", "=".repeat(20));
             println!("Ran {} tests in {} seconds", TEST_COUNTER, process_end_time);
         }
     }
@@ -64,41 +90,51 @@ pub fn describe(msg: &str, func: fn()) -> () {
 
 pub fn it(msg: &str, func: fn()) -> () {
     println!("{} {} {}", "=".repeat(10), msg, "=".repeat(10));
-    let mut file: File = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .create(true)
-        .open(".budgie_performance.log")
-        .unwrap();
 
-    thread::spawn(move || {
-        let mut thread_end_time: f32 = 0.;
-        let mut thread_start_duration: SystemTime = SystemTime::now();
+    let base_thread_json_data: JsonValue = object!{
+        thread_end_time: 0,
+        test_name: format!("{}", msg)
+    };
 
-        unsafe {
-            BEFORE_EACH();
-            TEST_COUNTER += 1;
+    unsafe {
+        if TIME_STAMP == 0 {
+            TIME_STAMP = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
         }
 
-        func();
+        create_dir_all("./.budgie/").unwrap();
+        
+        let file_name: String = format!(".budgie/{}.log", TIME_STAMP);
+        let mut file: File = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(file_name)
+            .unwrap();
 
-        unsafe {
+        thread::spawn(move || {
+            let mut thread_end_time: f32 = 0.;
+            let mut thread_start_duration: SystemTime = SystemTime::now();
+            
+            BEFORE_EACH();
+            TEST_COUNTER += 1;
+    
+            func();
+            
             AFTER_EACH();
             if MONITOR {
-                match SystemTime::now().duration_since(thread_start_duration) {
-                    Ok(n) => thread_end_time = n.as_secs_f32(),
-                    Err(_) => panic!("Failed to get epoch from system"),
-                }
+                let mut cpy_json_data: JsonValue = base_thread_json_data.clone();                
+                
+                cpy_json_data["thread_end_time"] = SystemTime::now().duration_since(thread_start_duration).unwrap().as_secs_f32().into();
 
-                match writeln!(file, "{}", thread_end_time) {
+                match writeln!(file, "{}", cpy_json_data.dump()) {
                     Err(why) => panic!("Failed to write line to file: {}", why),
                     Ok(_) => {}
                 }
             }
-        }
-    })
-    .join()
-    .unwrap();
+        })
+        .join()
+        .unwrap();
+    }
 }
 
 pub fn before_each(func: fn()) {
