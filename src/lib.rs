@@ -1,7 +1,5 @@
 extern crate textplots;
 
-use std::cmp::Eq;
-use std::cmp::Ord;
 use std::cmp::PartialEq;
 use std::cmp::PartialOrd;
 use std::fs::{create_dir_all, File, OpenOptions};
@@ -94,43 +92,59 @@ pub fn it(msg: &str, func: fn()) -> () {
     };
 
     unsafe {
-        if TIME_STAMP == 0 {
-            TIME_STAMP = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
-        }
+        if MONITOR {
+            if TIME_STAMP == 0 {
+                TIME_STAMP = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
+            }
 
-        create_dir_all("./.budgie/").unwrap();
-        
-        let file_name: String = format!(".budgie/{}.log", TIME_STAMP);
-        let mut file: File = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true)
-            .open(file_name)
-            .unwrap();
+            create_dir_all("./.budgie/").unwrap();
+            
+            let file_name: String = format!(".budgie/{}.log", TIME_STAMP);
+            let mut file = OpenOptions::new()
+                .write(true)
+                .append(true)
+                .create(true)
+                .open(file_name)
+                .unwrap();
 
-        thread::spawn(move || {
-            let mut thread_end_time: f32 = 0.;
-            let mut thread_start_duration: SystemTime = SystemTime::now();
-            
-            BEFORE_EACH();
-            TEST_COUNTER += 1;
-    
-            func();
-            
-            AFTER_EACH();
-            if MONITOR {
-                let mut cpy_json_data: JsonValue = base_thread_json_data.clone();                
+            thread::spawn(move || {
+                let mut thread_end_time: f32 = 0.;
+                let mut thread_start_duration: SystemTime = SystemTime::now();
                 
+                BEFORE_EACH();
+                TEST_COUNTER += 1;
+
+                func();
+
+                AFTER_EACH();
+
+                let mut cpy_json_data: JsonValue = base_thread_json_data.clone();
+
                 cpy_json_data["thread_end_time"] = SystemTime::now().duration_since(thread_start_duration).unwrap().as_secs_f32().into();
 
                 match writeln!(file, "{}", cpy_json_data.dump()) {
                     Err(why) => panic!("Failed to write line to file: {}", why),
                     Ok(_) => {}
                 }
-            }
-        })
-        .join()
-        .unwrap();
+
+            })
+            .join()
+            .unwrap();
+        } else {
+            thread::spawn(move || {
+                let mut thread_end_time: f32 = 0.;
+                let mut thread_start_duration: SystemTime = SystemTime::now();
+
+                BEFORE_EACH();
+                TEST_COUNTER += 1;
+
+                func();
+
+                AFTER_EACH();
+            })
+            .join()
+            .unwrap();
+        }
     }
 }
 
