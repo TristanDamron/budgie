@@ -1,7 +1,7 @@
 use budgie::*;
 
 fn main() {
-    //monitor();
+    monitor();
 
     describe("Testing math functions", || {
         after_each(|| println!("After each"));

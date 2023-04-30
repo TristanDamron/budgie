@@ -108,9 +108,8 @@ pub fn it(msg: &str, func: fn()) -> () {
                 .unwrap();
 
             thread::spawn(move || {
-                let mut thread_end_time: f32 = 0.;
-                let mut thread_start_duration: SystemTime = SystemTime::now();
-                
+                let thread_start_duration: SystemTime = SystemTime::now();
+
                 BEFORE_EACH();
                 TEST_COUNTER += 1;
 
@@ -132,9 +131,6 @@ pub fn it(msg: &str, func: fn()) -> () {
             .unwrap();
         } else {
             thread::spawn(move || {
-                let mut thread_end_time: f32 = 0.;
-                let mut thread_start_duration: SystemTime = SystemTime::now();
-
                 BEFORE_EACH();
                 TEST_COUNTER += 1;
 
