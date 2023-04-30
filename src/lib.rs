@@ -159,12 +159,12 @@ pub struct BudgieValue<T> {
 }
 
 #[derive(Default)]
-pub struct Assert<T: Ord + Eq> {
+pub struct Assert<T: PartialOrd + PartialEq> {
     pub compare_val: BudgieValue<T>,
     pub expect: bool,
 }
 
-impl<T: Ord + Eq> Assert<T> {
+impl<T: PartialOrd + PartialEq> Assert<T> {
     pub fn expect(mut self, val: T) -> Self {
         if !self.expect {
             self.compare_val.true_val = val;
@@ -223,79 +223,5 @@ impl<T: Ord + Eq> Assert<T> {
         };
 
         return self.assert_to_be(val);
-    }
-}
-
-#[derive(Default)]
-pub struct PartialAssert<T: PartialOrd + PartialEq> {
-    pub compare_val: BudgieValue<T>,
-    pub expect: bool,
-}
-
-impl<T: PartialOrd + PartialEq> PartialAssert<T> {
-    pub fn expect(mut self, val: T) -> Self {
-        if !self.expect {
-            self.compare_val.true_val = val;
-            self.compare_val.fmt_val = "Expected value".to_string();
-            self.expect = true;
-            return self;
-        } else {
-            panic!("expect() must not be chained to any other functions.");
-        }
-    }
-
-    pub fn expect_fmt(mut self, val: T, fmt_val: &str) -> Self {
-        self.compare_val.fmt_val = fmt_val.to_string();
-        return self.expect(val);
-    }
-
-    pub fn fmt(mut self, fmt_val: String) -> Self {
-        self.compare_val.fmt_val = fmt_val;
-        return self;
-    }
-
-    fn partial_assert_to_be(self, val: BudgieValue<T>) -> Self {
-        if self.expect {
-            if val.true_val == self.compare_val.true_val {
-                if val.fmt_val.is_empty() || self.compare_val.fmt_val.is_empty() {
-                    println!(
-                        "✅ PASSED: {} is equal to {}",
-                        self.compare_val.fmt_val, val.fmt_val
-                    );
-                } else {
-                    println!("✅ PASSED");
-                }
-            } else {
-                if val.fmt_val.is_empty() || self.compare_val.fmt_val.is_empty() {
-                    println!(
-                        "🛑 FAILED: {} is NOT equal to {}",
-                        self.compare_val.fmt_val, val.fmt_val
-                    );
-                } else {
-                    println!("🛑 FAILED");
-                }
-            }
-        } else {
-            panic!("You must chain to_be() to an expect() function call.");
-        }
-        return self;
-    }
-
-    pub fn to_be(self, val: T) -> Self {
-        let val: BudgieValue<T> = BudgieValue {
-            true_val: val,
-            fmt_val: format!(""),
-        };
-
-        return self.partial_assert_to_be(val);
-    }
-
-    pub fn to_be_fmt(self, val: T, fmt_val: &str) -> Self {
-        let val: BudgieValue<T> = BudgieValue {
-            true_val: val,
-            fmt_val: fmt_val.to_string(),
-        };
-
-        return self.partial_assert_to_be(val);
     }
 }

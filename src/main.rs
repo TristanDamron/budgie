@@ -33,7 +33,7 @@ fn main() {
             // TODO: implement to_be_close_to
             let divided: f32 = 1. / 2.;
 
-            PartialAssert::<_>::default()
+            Assert::<_>::default()
                 .expect_fmt(divided, "1 / 2")
                 .to_be_fmt(0.5, "one half");
         });
